@@ -1,0 +1,3 @@
+C:/Users/Mohammed/Desktop/practical project/build/CMakeFiles/practicalproject.dir
+C:/Users/Mohammed/Desktop/practical project/build/CMakeFiles/edit_cache.dir
+C:/Users/Mohammed/Desktop/practical project/build/CMakeFiles/rebuild_cache.dir
