@@ -53,7 +53,6 @@ struct Player {
 
     void update(float dt) {
         shape.move(velocity * dt);
-        // clamp inside field
         sf::Vector2f p = getPos();
         if (p.x - PLAYER_R < FIELD_LEFT)   { shape.setPosition({FIELD_LEFT  + PLAYER_R, p.y}); velocity.x = 0; }
         if (p.x + PLAYER_R > FIELD_RIGHT)  { shape.setPosition({FIELD_RIGHT - PLAYER_R, p.y}); velocity.x = 0; }
@@ -90,10 +89,40 @@ struct Ball {
         shape.move(velocity * dt);
 
         sf::Vector2f p = getPos();
-        if (p.x - BALL_R < FIELD_LEFT)   { shape.setPosition({FIELD_LEFT  + BALL_R, p.y}); velocity.x *= -0.7f; }
-        if (p.x + BALL_R > FIELD_RIGHT)  { shape.setPosition({FIELD_RIGHT - BALL_R, p.y}); velocity.x *= -0.7f; }
-        if (p.y - BALL_R < FIELD_TOP)    { shape.setPosition({p.x, FIELD_TOP    + BALL_R}); velocity.y *= -0.7f; }
-        if (p.y + BALL_R > FIELD_BOTTOM) { shape.setPosition({p.x, FIELD_BOTTOM - BALL_R}); velocity.y *= -0.7f; }
+
+        // left wall — only bounce if NOT in goal zone
+        if (p.x - BALL_R < FIELD_LEFT) {
+            if (p.y < GOAL_TOP || p.y > GOAL_TOP + GOAL_H) {
+                // not a goal, bounce
+                shape.setPosition({FIELD_LEFT + BALL_R + 1.f, p.y});
+                velocity.x = std::abs(velocity.x) * 0.8f;
+            }
+            // if in goal zone, let it pass through (goal detected in main)
+        }
+
+        // right wall — only bounce if NOT in goal zone
+        if (p.x + BALL_R > FIELD_RIGHT) {
+            if (p.y < GOAL_TOP || p.y > GOAL_TOP + GOAL_H) {
+                shape.setPosition({FIELD_RIGHT - BALL_R - 1.f, p.y});
+                velocity.x = -std::abs(velocity.x) * 0.8f;
+            }
+        }
+
+        if (p.y - BALL_R < FIELD_TOP)    { shape.setPosition({p.x, FIELD_TOP    + BALL_R + 1.f}); velocity.y =  std::abs(velocity.y) * 0.8f; }
+        if (p.y + BALL_R > FIELD_BOTTOM) { shape.setPosition({p.x, FIELD_BOTTOM - BALL_R - 1.f}); velocity.y = -std::abs(velocity.y) * 0.8f; }
+
+        // corner escape
+        p = getPos();
+        float spd = length(velocity);
+        bool nearLeft   = p.x - BALL_R < FIELD_LEFT   + 5.f;
+        bool nearRight  = p.x + BALL_R > FIELD_RIGHT  - 5.f;
+        bool nearTop    = p.y - BALL_R < FIELD_TOP    + 5.f;
+        bool nearBottom = p.y + BALL_R > FIELD_BOTTOM - 5.f;
+
+        if (spd < 30.f && (nearLeft || nearRight) && (nearTop || nearBottom)) {
+            sf::Vector2f center = {WINDOW_W / 2.f, WINDOW_H / 2.f};
+            velocity = normalize(center - p) * 120.f;
+        }
     }
 
     void draw(sf::RenderWindow& win) { win.draw(shape); }
@@ -105,34 +134,108 @@ void handleKick(Player& pl, Ball& ball) {
     float dist = length(diff);
     if (dist < PLAYER_R + BALL_R) {
         sf::Vector2f dir = normalize(diff);
-        // push ball out so they don't overlap
-        ball.shape.setPosition(pl.getPos() + dir * (PLAYER_R + BALL_R + 1.f));
-        // give ball velocity based on player velocity + kick
+
+        if (length(dir) < 0.01f)
+            dir = normalize(sf::Vector2f{WINDOW_W / 2.f, WINDOW_H / 2.f} - ball.getPos());
+
+        ball.shape.setPosition(pl.getPos() + dir * (PLAYER_R + BALL_R + 2.f));
+
         sf::Vector2f kickVel = pl.velocity * 0.5f + dir * KICK_FORCE;
+        if (length(kickVel) < 80.f)
+            kickVel = dir * 80.f;
+
         ball.velocity = kickVel;
     }
 }
 
 // ─── AI logic ────────────────────────────────────────────────────────────────
-void updateAI(Player& pl, const Ball& ball, float targetX, float dt) {
+
+// Full AI opponent (enemy team) — role based
+void updateAI(Player& pl, const Ball& ball, float targetX, int index, int total, float dt) {
     sf::Vector2f ballPos = ball.getPos();
     sf::Vector2f myPos   = pl.getPos();
 
-    // if close to ball, go toward goal; otherwise go toward ball
     sf::Vector2f target;
-    if (length(ballPos - myPos) < 150.f)
-        target = {targetX, ballPos.y};
-    else
-        target = ballPos;
+
+    if (total == 1) {
+        if (length(ballPos - myPos) < 150.f)
+            target = {targetX, ballPos.y};
+        else
+            target = ballPos;
+    } else {
+        float roleRatio = (float)index / (float)(total - 1);
+
+        if (roleRatio < 0.35f) {
+            if (length(ballPos - myPos) < 150.f)
+                target = {targetX, ballPos.y};
+            else
+                target = ballPos;
+        } else if (roleRatio < 0.7f) {
+            float offsetY = (index % 2 == 0) ? -90.f : 90.f;
+            target = {
+                (ballPos.x + targetX) / 2.f,
+                ballPos.y + offsetY
+            };
+        } else {
+            float defendX = (targetX > WINDOW_W / 2.f)
+                            ? WINDOW_W * 0.72f
+                            : WINDOW_W * 0.28f;
+            target = { defendX, ballPos.y };
+        }
+    }
+
+    target.x = std::max(FIELD_LEFT  + PLAYER_R, std::min(FIELD_RIGHT  - PLAYER_R, target.x));
+    target.y = std::max(FIELD_TOP   + PLAYER_R, std::min(FIELD_BOTTOM - PLAYER_R, target.y));
 
     sf::Vector2f dir = normalize(target - myPos);
-    pl.velocity = dir * AI_SPEED;
+    float dist = length(target - myPos);
+    float speed = (dist < 40.f) ? AI_SPEED * (dist / 40.f) : AI_SPEED;
+
+    pl.velocity = dir * speed;
+    pl.update(dt);
+}
+
+// Teammate AI — each player gets a role based on their index
+void updateTeammateAI(Player& pl, const Ball& ball, float attackX, int index, int total, float dt) {
+    sf::Vector2f ballPos = ball.getPos();
+    sf::Vector2f myPos   = pl.getPos();
+
+    sf::Vector2f target;
+
+    if (total == 1) {
+        target = ballPos;
+    } else {
+        float roleRatio = (float)index / (float)(total - 1);
+
+        if (roleRatio < 0.35f) {
+            target = ballPos;
+        } else if (roleRatio < 0.7f) {
+            float offsetY = (index % 2 == 0) ? -80.f : 80.f;
+            target = {
+                (ballPos.x + attackX) / 2.f,
+                ballPos.y + offsetY
+            };
+        } else {
+            float defendX = (attackX > WINDOW_W / 2.f)
+                            ? WINDOW_W * 0.30f
+                            : WINDOW_W * 0.70f;
+            target = { defendX, ballPos.y };
+        }
+    }
+
+    target.x = std::max(FIELD_LEFT  + PLAYER_R, std::min(FIELD_RIGHT  - PLAYER_R, target.x));
+    target.y = std::max(FIELD_TOP   + PLAYER_R, std::min(FIELD_BOTTOM - PLAYER_R, target.y));
+
+    sf::Vector2f dir = normalize(target - myPos);
+    float dist = length(target - myPos);
+    float speed = (dist < 40.f) ? AI_SPEED * (dist / 40.f) : AI_SPEED;
+
+    pl.velocity = dir * speed;
     pl.update(dt);
 }
 
 // ─── Draw field ──────────────────────────────────────────────────────────────
 void drawField(sf::RenderWindow& win) {
-    // grass
     sf::RectangleShape grass({FIELD_RIGHT - FIELD_LEFT, FIELD_BOTTOM - FIELD_TOP});
     grass.setPosition({FIELD_LEFT, FIELD_TOP});
     grass.setFillColor(sf::Color(34, 139, 34));
@@ -140,13 +243,11 @@ void drawField(sf::RenderWindow& win) {
     grass.setOutlineColor(sf::Color::White);
     win.draw(grass);
 
-    // center line
     sf::RectangleShape centerLine({3.f, FIELD_BOTTOM - FIELD_TOP});
     centerLine.setPosition({WINDOW_W / 2.f - 1.5f, FIELD_TOP});
     centerLine.setFillColor(sf::Color(255,255,255,160));
     win.draw(centerLine);
 
-    // center circle
     sf::CircleShape centerCircle(60.f);
     centerCircle.setOrigin({60.f, 60.f});
     centerCircle.setPosition({WINDOW_W / 2.f, WINDOW_H / 2.f});
@@ -155,7 +256,6 @@ void drawField(sf::RenderWindow& win) {
     centerCircle.setOutlineColor(sf::Color(255,255,255,160));
     win.draw(centerCircle);
 
-    // left goal
     sf::RectangleShape leftGoal({GOAL_W, GOAL_H});
     leftGoal.setPosition({FIELD_LEFT - GOAL_W, GOAL_TOP});
     leftGoal.setFillColor(sf::Color(255,255,255,60));
@@ -163,7 +263,6 @@ void drawField(sf::RenderWindow& win) {
     leftGoal.setOutlineColor(sf::Color::White);
     win.draw(leftGoal);
 
-    // right goal
     sf::RectangleShape rightGoal({GOAL_W, GOAL_H});
     rightGoal.setPosition({FIELD_RIGHT, GOAL_TOP});
     rightGoal.setFillColor(sf::Color(255,255,255,60));
@@ -173,16 +272,16 @@ void drawField(sf::RenderWindow& win) {
 }
 
 // ─── Check goal ──────────────────────────────────────────────────────────────
-// returns 1 if right team scored, 2 if left team scored, 0 otherwise
 int checkGoal(const Ball& ball) {
     sf::Vector2f p = ball.getPos();
-    if (p.x - BALL_R < FIELD_LEFT - GOAL_W &&
-        p.y > GOAL_TOP && p.y < GOAL_TOP + GOAL_H) return 2;
-    if (p.x + BALL_R > FIELD_RIGHT + GOAL_W &&
-        p.y > GOAL_TOP && p.y < GOAL_TOP + GOAL_H) return 1;
+    // left goal — ball crosses left wall inside goal height
+    if (p.x - BALL_R < FIELD_LEFT - 2.f &&
+        p.y + BALL_R > GOAL_TOP && p.y - BALL_R < GOAL_TOP + GOAL_H) return 2;
+    // right goal — ball crosses right wall inside goal height
+    if (p.x + BALL_R > FIELD_RIGHT + 2.f &&
+        p.y + BALL_R > GOAL_TOP && p.y - BALL_R < GOAL_TOP + GOAL_H) return 1;
     return 0;
 }
-
 // ─── Spawn helpers ───────────────────────────────────────────────────────────
 std::vector<Player> spawnTeam(int count, bool leftSide, sf::Color color, bool ai) {
     std::vector<Player> team;
@@ -223,13 +322,11 @@ GameConfig showMenu(sf::RenderWindow& win, sf::Font& font) {
 
         win.clear(sf::Color(20, 80, 20));
 
-        // Title
         sf::Text title(font, "TOP-DOWN FOOTBALL", 48);
         title.setFillColor(sf::Color::White);
         title.setPosition({WINDOW_W/2.f - title.getGlobalBounds().size.x/2.f, 120.f});
         win.draw(title);
 
-        // Team size
         std::ostringstream ss;
         ss << "Team Size: " << teamSize << "   (UP/DOWN to change)";
         sf::Text sizeText(font, ss.str(), 28);
@@ -237,14 +334,12 @@ GameConfig showMenu(sf::RenderWindow& win, sf::Font& font) {
         sizeText.setPosition({WINDOW_W/2.f - sizeText.getGlobalBounds().size.x/2.f, 280.f});
         win.draw(sizeText);
 
-        // Mode
         std::string modeStr = std::string("Mode: ") + (pvp ? "Player vs Player" : "Player vs Computer") + "   (TAB to switch)";
         sf::Text modeText(font, modeStr, 28);
         modeText.setFillColor(sf::Color::Cyan);
         modeText.setPosition({WINDOW_W/2.f - modeText.getGlobalBounds().size.x/2.f, 350.f});
         win.draw(modeText);
 
-        // Controls hint
         sf::Text ctrl(font, "ENTER to Start", 32);
         ctrl.setFillColor(sf::Color::White);
         ctrl.setPosition({WINDOW_W/2.f - ctrl.getGlobalBounds().size.x/2.f, 460.f});
@@ -268,33 +363,26 @@ int main() {
                             "Top-Down Football");
     window.setFramerateLimit(60);
 
-    // Load font
     sf::Font font;
     if (!font.openFromFile("C:/Windows/Fonts/arial.ttf")) {
         return -1;
     }
 
     while (window.isOpen()) {
-        // ── Menu ──
         GameConfig cfg = showMenu(window, font);
         if (!window.isOpen()) break;
 
-        // ── Setup teams ──
-        // Team A (left, blue) — always human (WASD)
         std::vector<Player> teamA = spawnTeam(cfg.teamSize, true,  sf::Color(30,100,255), false);
-        // Team B (right, red) — human (arrows) if PvP, else AI
         std::vector<Player> teamB = spawnTeam(cfg.teamSize, false, sf::Color(220,40,40),  !cfg.pvp);
 
         Ball ball;
         int scoreA = 0, scoreB = 0;
         sf::Clock clock;
 
-        // ── Game loop ──
         while (window.isOpen()) {
             float dt = clock.restart().asSeconds();
             if (dt > 0.05f) dt = 0.05f;
 
-            // Events
             while (const std::optional event = window.pollEvent()) {
                 if (event->is<sf::Event::Closed>()) window.close();
                 if (const auto* key = event->getIf<sf::Event::KeyPressed>()) {
@@ -310,13 +398,13 @@ int main() {
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) dir.x -= 1;
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) dir.x += 1;
                 dir = normalize(dir);
-                // move only first player; others do simple AI-follow
-                for (int i = 0; i < (int)teamA.size(); i++) {
+                int total = (int)teamA.size();
+                for (int i = 0; i < total; i++) {
                     if (i == 0) {
                         teamA[i].velocity = dir * PLAYER_SPEED;
                         teamA[i].update(dt);
                     } else {
-                        updateAI(teamA[i], ball, FIELD_RIGHT + 10.f, dt);
+                        updateTeammateAI(teamA[i], ball, FIELD_RIGHT + 10.f, i - 1, total - 1, dt);
                     }
                 }
             }
@@ -329,17 +417,19 @@ int main() {
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))  dir.x -= 1;
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) dir.x += 1;
                 dir = normalize(dir);
-                for (int i = 0; i < (int)teamB.size(); i++) {
+                int total = (int)teamB.size();
+                for (int i = 0; i < total; i++) {
                     if (i == 0) {
                         teamB[i].velocity = dir * PLAYER_SPEED;
                         teamB[i].update(dt);
                     } else {
-                        updateAI(teamB[i], ball, FIELD_LEFT - 10.f, dt);
+                        updateTeammateAI(teamB[i], ball, FIELD_LEFT - 10.f, i - 1, total - 1, dt);
                     }
                 }
             } else {
-                for (auto& p : teamB)
-                    updateAI(p, ball, FIELD_LEFT - 10.f, dt);
+                int total = (int)teamB.size();
+                for (int i = 0; i < total; i++)
+                    updateAI(teamB[i], ball, FIELD_LEFT - 10.f, i, total, dt);
             }
 
             // ── Ball ──
