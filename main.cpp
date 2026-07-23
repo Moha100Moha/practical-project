@@ -7,6 +7,7 @@
 #include <ctime>
 
 // ─── Constants ───────────────────────────────────────────────────────────────
+
 const float WINDOW_W     = 1000.f;
 const float WINDOW_H     = 700.f;
 const float FIELD_LEFT   = 80.f;
@@ -32,6 +33,7 @@ sf::Vector2f normalize(sf::Vector2f v) {
     if (l == 0.f) return {0.f, 0.f};
     return {v.x / l, v.y / l};
 }
+
 
 // ─── Player ──────────────────────────────────────────────────────────────────
 struct Player {
@@ -62,6 +64,7 @@ struct Player {
 
     void draw(sf::RenderWindow& win) { win.draw(shape); }
 };
+
 
 // ─── Ball ────────────────────────────────────────────────────────────────────
 struct Ball {
@@ -128,6 +131,7 @@ struct Ball {
     void draw(sf::RenderWindow& win) { win.draw(shape); }
 };
 
+
 // ─── Collision player <-> ball ───────────────────────────────────────────────
 void handleKick(Player& pl, Ball& ball) {
     sf::Vector2f diff = ball.getPos() - pl.getPos();
@@ -148,7 +152,11 @@ void handleKick(Player& pl, Ball& ball) {
     }
 }
 
+
+
 // ─── AI logic ────────────────────────────────────────────────────────────────
+
+
 
 // Full AI opponent (enemy team) — role based
 void updateAI(Player& pl, const Ball& ball, float targetX, int index, int total, float dt) {
@@ -195,6 +203,8 @@ void updateAI(Player& pl, const Ball& ball, float targetX, int index, int total,
     pl.update(dt);
 }
 
+
+
 // Teammate AI — each player gets a role based on their index
 void updateTeammateAI(Player& pl, const Ball& ball, float attackX, int index, int total, float dt) {
     sf::Vector2f ballPos = ball.getPos();
@@ -234,6 +244,9 @@ void updateTeammateAI(Player& pl, const Ball& ball, float attackX, int index, in
     pl.update(dt);
 }
 
+
+
+
 // ─── Draw field ──────────────────────────────────────────────────────────────
 void drawField(sf::RenderWindow& win) {
     sf::RectangleShape grass({FIELD_RIGHT - FIELD_LEFT, FIELD_BOTTOM - FIELD_TOP});
@@ -271,6 +284,8 @@ void drawField(sf::RenderWindow& win) {
     win.draw(rightGoal);
 }
 
+
+
 // ─── Check goal ──────────────────────────────────────────────────────────────
 int checkGoal(const Ball& ball) {
     sf::Vector2f p = ball.getPos();
@@ -282,6 +297,9 @@ int checkGoal(const Ball& ball) {
         p.y + BALL_R > GOAL_TOP && p.y - BALL_R < GOAL_TOP + GOAL_H) return 1;
     return 0;
 }
+
+
+
 // ─── Spawn helpers ───────────────────────────────────────────────────────────
 std::vector<Player> spawnTeam(int count, bool leftSide, sf::Color color, bool ai) {
     std::vector<Player> team;
@@ -293,6 +311,8 @@ std::vector<Player> spawnTeam(int count, bool leftSide, sf::Color color, bool ai
     }
     return team;
 }
+
+
 
 // ─── Menu screen ─────────────────────────────────────────────────────────────
 struct GameConfig {
@@ -354,6 +374,8 @@ GameConfig showMenu(sf::RenderWindow& win, sf::Font& font) {
     }
     return cfg;
 }
+
+
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 int main() {
@@ -470,4 +492,5 @@ int main() {
     }
 
     return 0;
+
 }
