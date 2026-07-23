@@ -7,21 +7,21 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "SFML::Graphics::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-SFML__Graphics-Debug-2f3f83be04f5d726f99e.json",
+					"jsonFile" : "target-SFML__Graphics-Debug-9a31cc6f126a3bababef.json",
 					"name" : "SFML::Graphics",
 					"projectIndex" : 0
 				},
 				{
 					"directoryIndex" : 0,
 					"id" : "SFML::System::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-SFML__System-Debug-c10935990083e07940de.json",
+					"jsonFile" : "target-SFML__System-Debug-c9d98d5522f3db9b0554.json",
 					"name" : "SFML::System",
 					"projectIndex" : 0
 				},
 				{
 					"directoryIndex" : 0,
 					"id" : "SFML::Window::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-SFML__Window-Debug-1808cc96b49499e9715f.json",
+					"jsonFile" : "target-SFML__Window-Debug-606be94c3b5c4b3fe57d.json",
 					"name" : "SFML::Window",
 					"projectIndex" : 0
 				}
@@ -75,7 +75,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "practicalproject::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-practicalproject-Debug-2709fa788c2590ea5405.json",
+					"jsonFile" : "target-practicalproject-Debug-36107a048e0ceb5e24d0.json",
 					"name" : "practicalproject",
 					"projectIndex" : 0
 				}
